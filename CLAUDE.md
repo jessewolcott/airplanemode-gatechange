@@ -50,4 +50,4 @@ Caddy on the box, phones locking mid-game (autopilot should cover it).
 ## Releasing
 
 Push a `vX.Y.Z` tag. CI tests, then publishes `ghcr.io/jessewolcott/airplanemode-gatechange:X.Y.Z`
-(arm64 + amd64). **Ask Jesse before pushing a release tag.** Not released yet.
+(arm64 + amd64). **Ask Jesse before pushing a release tag.** Released: 0.1.0 (pinned in the platform's `compose.yaml`).
