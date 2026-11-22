@@ -294,8 +294,9 @@ class Room:
         if self.seen_exposed and self.seen_exposed[0] == exposed:
             return
         self.seen_exposed = key
-        now = time.monotonic()
-        self.catchers = [(now + BOT_DELAY * self.rng.uniform(0.7, 2.0), b)
+        # Timed from the move that exposed them, like the next bot move, so with no delay a
+        # catch ties with that move and wins (catches sort first).
+        self.catchers = [(self.changed_at + BOT_DELAY * self.rng.uniform(0.7, 2.0), b)
                          for b, s in enumerate(self.seats)
                          if s.kind == "bot" and b != exposed and bots.wants_to_catch(s.level, self.rng)]
 
