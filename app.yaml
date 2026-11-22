@@ -1,0 +1,15 @@
+# AirplaneMode app manifest. See the platform repo: docs/app-contract.md
+id: gatechange
+name: Gate Change
+description: An airport-themed colour-and-number card game. Play bots on your own or friends across the hotspot.
+image: ghcr.io/jessewolcott/airplanemode-gatechange
+port: 8000
+path: /gatechange/
+memory: 64m           # rooms live in memory; no volume
+needs:
+  llm: none
+env:
+  GATECHANGE_BOT_DELAY: Seconds a bot "thinks" before moving (default 1.0).
+  GATECHANGE_AWAY: Seconds without a poll before autopilot takes a seat (default 45).
+  GATECHANGE_IDLE_TURN: Seconds someone may sit on their turn before autopilot plays it (default 60).
+  GATECHANGE_MAX_ROOMS: Rooms kept at once (default 200); idle rooms go after 2 hours.
