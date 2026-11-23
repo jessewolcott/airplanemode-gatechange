@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from engine import IllegalMove
-from rooms import Rooms
+from rooms import Rooms, RoomsFull
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -65,8 +65,11 @@ async def open_games():
 async def create(request: Request):
     need_header(request)
     data = await body(request)
-    room = rooms.create(data.get("name"), public=data.get("public", True) is not False,
-                        solo=data.get("solo") is True)
+    try:
+        room = rooms.create(data.get("name"), public=data.get("public", True) is not False,
+                            solo=data.get("solo") is True)
+    except RoomsFull as e:
+        raise HTTPException(503, str(e))
     return {"code": room.code, "token": room.host.token}
 
 

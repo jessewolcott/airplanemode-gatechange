@@ -954,10 +954,17 @@ $("#logStrip").onclick = showLog;
 $("#drawPile").onclick = () => act({ type: "draw" });
 $("#reclaim").onclick = () => act({ type: "reclaim" });
 addEventListener("resize", () => { if (S.v && S.v.game && !$("#table").hidden) renderHand(S.v); });
-document.addEventListener("visibilitychange", () => { if (!document.hidden && S.session) poll(++S.gen); });
+// Coming back (a refresh, an unlocked phone): rejoin with our token, which takes the seat back
+// from autopilot, then poll. A closed table shows up as a 404 in poll().
+async function resume() {
+  const s = S.session; if (!s) return;
+  try { await call("POST", `api/rooms/${s.code}/join`, { token: s.token }, s.token); } catch {}
+  if (S.session === s) poll(++S.gen);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.session) resume(); });
 
 const hashCode = (location.hash.match(/join=([A-Za-z]{4})/) || [])[1];
-if (S.session) { show("home"); poll(++S.gen); }
+if (S.session) { show("home"); resume(); }
 else { show("home"); if (hashCode) { $("#joincode").value = hashCode.toUpperCase(); } }
 </script>
 </body>

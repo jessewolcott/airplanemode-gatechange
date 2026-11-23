@@ -10,6 +10,9 @@ needs:
   llm: none
 env:
   GATECHANGE_BOT_DELAY: Seconds a bot "thinks" before moving (default 1.0).
-  GATECHANGE_AWAY: Seconds without a poll before autopilot takes a seat (default 45).
-  GATECHANGE_IDLE_TURN: Seconds someone may sit on their turn before autopilot plays it (default 60).
-  GATECHANGE_MAX_ROOMS: Rooms kept at once (default 200); idle rooms go after 2 hours.
+  GATECHANGE_AWAY: Seconds without any request before a seat shows as away; autopilot takes it when their turn comes (default 45).
+  GATECHANGE_IDLE_TURN: Seconds since the table last changed before autopilot takes the turn of someone sitting on it (default 60).
+  GATECHANGE_MAX_ROOMS: Rooms kept at once (default 200). When full, the least recently active lobby or finished game makes way; games in progress never do (a new room is refused instead).
+  GATECHANGE_ROOM_IDLE: Seconds a room may sit untouched before it is dropped (default 7200, 2 hours).
+  GATECHANGE_POLL_WAIT: Seconds a long-poll waits for a change before answering (default 20); keep it well under GATECHANGE_AWAY.
+  GATECHANGE_SEED: Fixed seed for repeatable deals, for testing (default empty: random).

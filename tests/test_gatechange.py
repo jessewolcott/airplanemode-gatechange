@@ -1,5 +1,6 @@
 """Gate Change tests: rules engine, bots (many full games), rooms and the HTTP API.
 Run: python tests/test_gatechange.py"""
+import colorsys
 import copy
 import json
 import os
@@ -428,11 +429,37 @@ def my_move(v):
 def test_page_and_health():
     assert ok(c.get("/health")) == {"ok": True}
     html = c.get("/").text
-    assert "Gate Change" in html and '"api/rooms' in html or "'api/rooms" in html or "`api/rooms" in html
+    assert "Gate Change" in html and ('"api/rooms' in html or "'api/rooms" in html or "`api/rooms" in html)
     assert '"/api/' not in html and "'/api/" not in html and "`/api/" not in html
     assert not re.search(r'(src|href)="(https?:|//|/[^/])', html), re.findall(r'(?:src|href)="[^"]*"', html)
-    assert "uno" not in html.lower().replace("unordered", "")
     assert c.get("/icon.svg").headers["content-type"].startswith("image/svg")
+
+
+def hue_family(hex_colour):
+    r, g, b = (int(hex_colour[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    h, _, _ = colorsys.rgb_to_hls(r, g, b)
+    h *= 360
+    if h < 20 or h >= 340:
+        return "red"
+    if 45 <= h < 70:
+        return "yellow"
+    if 90 <= h < 160:
+        return "green"
+    if 200 <= h < 250:
+        return "blue"
+    return f"other {h:.0f}"
+
+
+def test_page_keeps_its_own_identity():
+    html = c.get("/").text
+    # the commercial game's name never appears as a word ("unordered", "unofficial" are fine)
+    assert not re.search(r"\buno\b", html, re.I), re.findall(r".{20}\buno\b.{20}", html, re.I)
+    # the four airline colours aren't the classic red/yellow/green/blue set
+    colours = dict(re.findall(r"--(sun|tide|star|peak):\s*#([0-9a-fA-F]{6})\b", html))
+    assert sorted(colours) == ["peak", "star", "sun", "tide"], colours
+    families = {hue_family(v) for v in colours.values()}
+    assert families != {"red", "yellow", "green", "blue"}, colours
+    assert hue_family("ff0000") == "red" and hue_family("0000ff") == "blue"   # the check itself
 
 
 def test_header_and_tokens_required():
@@ -578,6 +605,11 @@ def test_autopilot_and_reclaim():
         wait_until(lambda: room.game.current != 0 or room.game.phase != "playing")
         v = ok(act(code, t, type="reclaim"))
         assert not v["seats"][0]["auto"]
+        # rejoining with your token (a refresh, an unlocked phone) also takes the seat back
+        room.seats[0].auto = True
+        again = ok(c.post(f"/api/rooms/{code}/join", json={"name": "Sleepy", "token": t}, headers=H))
+        assert again["token"] == t and not room.seats[0].auto
+        assert not state(code, t)["seats"][0]["auto"]
     finally:
         rooms.IDLE_TURN = old
 
@@ -602,6 +634,66 @@ def test_bots_catch_a_missed_last_call():
         assert catch["target"] == 0 and catch["seat"] in (1, 2)
     finally:
         bots.CATCH_CHANCE["hard"] = old
+
+
+def test_next_round_when_nobody_is_here():
+    r = ok(c.post("/api/rooms", json={"name": "Napper"}, headers=H))
+    code, t = r["code"], r["token"]
+    ok(act(code, t, type="add_bot", level="easy"))
+    ok(act(code, t, type="start"))                         # first to 500: rounds go on
+    room = gc.rooms.get(code)
+    wait_until(lambda: room.game.current == 0 and room.game.turn_phase == "turn")
+    old = rooms.AWAY_AFTER, rooms.AUTO_NEXT_ROUND
+    rooms.AWAY_AFTER, rooms.AUTO_NEXT_ROUND = 0.5, 0.05
+    try:
+        rig(room.game, [["sun.1"], ["tide.1", "tide.2"]], top="sun.5")
+        ok(act(code, t, type="play", card="sun.1"))
+        assert room.game.phase == "round_over" and room.game.round == 1
+        time.sleep(0.25)                                   # the person is still here: wait for them
+        assert room.game.phase == "round_over"
+        wait_until(lambda: room.game.round >= 2, 3)        # then they're away: the table moves on
+    finally:
+        rooms.AWAY_AFTER, rooms.AUTO_NEXT_ROUND = old
+    room.close()
+    # on autopilot counts as not here too: a whole match to 500 plays out with nobody pressing
+    r = ok(c.post("/api/rooms", json={"name": "Autopilot"}, headers=H))
+    code, t = r["code"], r["token"]
+    ok(act(code, t, type="add_bot", level="easy"))
+    room = gc.rooms.get(code)
+    old_idle = rooms.IDLE_TURN
+    rooms.AUTO_NEXT_ROUND, rooms.IDLE_TURN = 0.01, 0.05    # the driver puts them on autopilot
+    try:
+        ok(act(code, t, type="start"))
+        wait_until(lambda: room.seats[0].auto, 3)
+        wait_until(lambda: room.game.phase == "game_over", 20)
+        assert room.game.round >= 2 and room.seats[0].auto
+    finally:
+        rooms.AUTO_NEXT_ROUND, rooms.IDLE_TURN = old[1], old_idle
+        room.close()
+
+
+def test_full_server_never_closes_a_live_game():
+    for room in gc.rooms.rooms.values():
+        room.close()
+    gc.rooms.rooms.clear()
+    old_max = rooms.MAX_ROOMS
+    rooms.MAX_ROOMS = 3
+    new_room = lambda **kw: c.post("/api/rooms", json={"name": "P", **kw}, headers=H)
+    try:
+        lobby = ok(new_room())["code"]
+        live = [ok(new_room(solo=True))["code"] for _ in range(2)]
+        third = ok(new_room())["code"]                     # the lobby goes, not a game
+        assert lobby not in gc.rooms.rooms and all(x in gc.rooms.rooms for x in live)
+        live.append(ok(new_room(solo=True))["code"])       # again: the other lobby goes
+        assert third not in gc.rooms.rooms and sorted(gc.rooms.rooms) == sorted(live)
+        r = new_room()                                     # all three are games in progress
+        assert r.status_code == 503 and "game going" in r.json()["detail"], r.text
+        assert sorted(gc.rooms.rooms) == sorted(live)
+        gc.rooms.rooms[live[1]].game.phase = "game_over"   # a finished game can go
+        ok(new_room())
+        assert live[1] not in gc.rooms.rooms and live[0] in gc.rooms.rooms and live[2] in gc.rooms.rooms
+    finally:
+        rooms.MAX_ROOMS = old_max
 
 
 def test_rooms_are_capped_and_expire():

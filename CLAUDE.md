@@ -15,7 +15,9 @@ environment notes and `docs/app-contract.md` for the rules.
 - `bots.py`: easy/normal/hard. Pure functions of the game and an `rng`; they may only use
   public information (own hand, discards, hand sizes, scores, `game.voids`).
 - `rooms.py`: rooms, seat tokens, long-poll (`Room.wait`), and one driver task per started
-  room (bot moves, bot catches, autopilot takeover).
+  room (bot moves, bot catches, autopilot takeover, Next round when no person is here).
+  At `MAX_ROOMS` only lobbies/finished games are evicted; a live game never is (`RoomsFull`
+  -> 503).
 - `app.py`: HTTP. Token in `X-Player`; POSTs need `X-GateChange: 1`.
 
 ## Commands
@@ -32,7 +34,11 @@ is git-ignored.
 
 - **Original game, not a clone's branding.** Own name, airlines, card names and look. Never use
   the name of the well-known commercial game this resembles, its logo, its card design or its
-  red/yellow/green/blue look (a test greps the page).
+  red/yellow/green/blue look. `test_page_keeps_its_own_identity` checks two things in
+  `static/index.html`: that name never appears as a whole word (case-insensitive word-boundary
+  match, so "unordered" or "unofficial" are fine), and the four airline colours (`--sun`,
+  `--tide`, `--star`, `--peak`, as 6-digit hex) don't land one each in red, yellow, green and
+  blue hue bands. Logos and card design aren't tested: check those by eye.
 - **All rules on the server.** The page sends intents; `engine.py` decides.
 - **Never leak hidden information**: other hands, the draw pile, whether a +4 was a bluff
   (`pending["guilty"]`), another player's drawn card. Tests check `view()`.

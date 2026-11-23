@@ -8,8 +8,10 @@ ever receives another player's cards.
 Clients long-poll `state?since=<version>`: the call returns as soon as the room's version moves,
 or after POLL_WAIT seconds with the same version. Each started room runs one asyncio task (the
 driver) that plays bot turns after a short human-feeling delay, lets bots catch a missed Last
-call, and puts a person on autopilot when they're away (no polls for AWAY_AFTER s) or sit on
-their turn for IDLE_TURN s. Any move by that person (or "reclaim") takes the seat back.
+call, and puts a person on autopilot when it's their turn and they're away (no request for
+AWAY_AFTER s) or IDLE_TURN s have passed since the table last changed. Any move by that person,
+"reclaim", or rejoining with their token takes the seat back. Between rounds, if every person
+is away, on autopilot or gone, the driver starts the next round after AUTO_NEXT_ROUND s.
 """
 import asyncio
 import logging
@@ -32,9 +34,14 @@ AWAY_AFTER = float(os.getenv("GATECHANGE_AWAY", "45"))
 IDLE_TURN = float(os.getenv("GATECHANGE_IDLE_TURN", "60"))
 POLL_WAIT = float(os.getenv("GATECHANGE_POLL_WAIT", "20"))
 SEED = os.getenv("GATECHANGE_SEED")                              # fixed seed: repeatable games
+AUTO_NEXT_ROUND = 8.0          # seconds at "Round over" before the driver moves on, if nobody's here
 SOLO_BOTS = 3
 BOT_NAMES = ("Ada", "Kofi", "Mira", "Jun", "Lou", "Ines", "Teo", "Noor", "Ravi", "Sam")
 GAME_MOVES = {"play", "draw", "pass", "accept", "challenge", "call", "catch"}
+
+
+class RoomsFull(Exception):
+    """Every room slot holds a game in progress: no room can be made right now."""
 
 
 def clean_name(name, fallback="Traveller"):
@@ -116,7 +123,8 @@ class Room:
         i = self.seat_of(token)
         if i is not None:
             s = self.seats[i]
-            s.left, s.last_seen = False, time.monotonic()
+            # Coming back with your token takes your seat back from autopilot.
+            s.left, s.auto, s.last_seen = False, False, time.monotonic()
             if name:
                 s.name = clean_name(name, s.name)
             self.changed()
@@ -302,7 +310,15 @@ class Room:
 
     def _plan(self, now):
         g = self.game
-        if g is None or g.phase != "playing" or self.closed:
+        if g is None or self.closed:
+            return None
+        if g.phase == "round_over":
+            # Anyone seated can press Next round. If no person is here to do it (all away, on
+            # autopilot or gone), move on by ourselves after a short pause.
+            here = [s.last_seen + AWAY_AFTER for s in self.seats
+                    if s.kind == "human" and not s.auto and not s.left]
+            return (max([self.changed_at + AUTO_NEXT_ROUND, *here]), 3, "next_round", None)
+        if g.phase != "playing":
             return None
         items = [(at, 0, "catch", b) for at, b in self.catchers]
         cur = g.current
@@ -329,6 +345,8 @@ class Room:
                 g.act(seat, {"type": "catch", "target": g.exposed})
         elif kind == "takeover":
             self.seats[seat].auto = True
+        elif kind == "next_round":
+            g.next_round()
         else:
             self._bot_move(seat)
         self.changed()
@@ -418,7 +436,14 @@ class Rooms:
     def create(self, name, public=True, solo=False):
         self.sweep()
         while len(self.rooms) >= MAX_ROOMS:
-            oldest = min(self.rooms.values(), key=lambda r: r.touched)
+            # Make space from rooms not in a game (lobbies, finished games), least recently
+            # active first. A game in progress is never closed to make room for a new one.
+            spare = [r for r in self.rooms.values()
+                     if r.closed or r.game is None or r.game.phase == "game_over"]
+            if not spare:
+                raise RoomsFull(f"Every table on this hotspot ({MAX_ROOMS}) has a game going. "
+                                "Try again when one finishes.")
+            oldest = min(spare, key=lambda r: r.touched)
             self.rooms.pop(oldest.code).close()
         code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(4))
         while code in self.rooms:

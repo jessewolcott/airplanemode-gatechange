@@ -62,12 +62,22 @@ the lightest hand wins the round.
   hits a player about to go out, names airlines the next player has run out of, and challenges
   a +4 when the odds say it was a bluff.
 - **Phones lock and people wander off.** Your seat is tied to your browser, so a refresh or an
-  unlocked phone puts you straight back. If you're gone for 45 seconds, or sit on your turn for
-  60, a bot plays for you until you tap *Take my seat back*.
+  unlocked phone puts you straight back, autopilot off. An open page checks in at least every
+  20 seconds; after 45 seconds with no contact from your phone your seat shows as *away*, but
+  that's only a label until your turn comes. On your turn a bot takes over (autopilot) if you're
+  away, or if 60 seconds pass with nothing happening at the table (the clock restarts on any
+  change at the table, such as someone's Last call, so it usually runs from the move that made
+  it your turn). Autopilot keeps playing for you until you tap *Take my seat back*, make a
+  move yourself, or come back to the page.
+- **Between rounds** the table waits for *Next round*, which anyone seated can press. If every
+  person at the table is away, on autopilot or has left, the next round starts on its own after
+  a few seconds.
 - **Rematch** keeps the table; *Change the table* goes back to the lobby.
 
 Everything is kept in memory: no accounts, no files, nothing written to disk. Idle tables go
-after 2 hours.
+after 2 hours. The box keeps up to 200 tables; when it's full, a new table replaces the least
+recently used lobby or finished game. A game in progress is never closed to make room: if all
+200 tables are mid-game, *Host a game* and *Play vs bots* say so until one finishes.
 
 ## Running it
 
@@ -87,7 +97,9 @@ python tests/test_gatechange.py       # rules, bots, rooms and API (CI runs thes
 | `GATECHANGE_BOT_DELAY` | `1.0` | seconds a bot "thinks" before moving |
 | `GATECHANGE_AWAY` | `45` | seconds without contact before autopilot takes a seat |
 | `GATECHANGE_IDLE_TURN` | `60` | seconds someone may sit on their turn before autopilot plays it |
-| `GATECHANGE_MAX_ROOMS` | `200` | tables kept at once |
+| `GATECHANGE_MAX_ROOMS` | `200` | tables kept at once (lobbies and finished games make way; games in progress never do) |
+| `GATECHANGE_ROOM_IDLE` | `7200` | seconds (2 hours) a table may sit untouched before it's dropped |
+| `GATECHANGE_POLL_WAIT` | `20` | seconds a phone's request waits for news before answering anyway; keep it well under `GATECHANGE_AWAY` |
 | `GATECHANGE_SEED` | *(empty)* | fixed seed for repeatable deals (testing) |
 
 *Not yet tested on real hardware.*
