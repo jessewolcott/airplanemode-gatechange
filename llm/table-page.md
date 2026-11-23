@@ -27,7 +27,10 @@ are as of 0.1.2.
 Every screen has the **AirplaneMode home button** (`a.am-home`, `href="../"`, app contract
 item 10): a fixed 44 px house at the top right of `#home` (`.am-home.float`), and the last
 item in the right-hand group (`.bar .end`) of the lobby bar (after Rules) and the table bar
-(after Scores). It has `z-index: 35`, above the sheets (30/31) and `#result` (25), so it
+(after Scores). Both bars are `.bar.centred`: a grid `minmax(max-content, 1fr) auto
+minmax(max-content, 1fr)`, so the title (lobby) and "ROUND n · TO 500" (table) sit exactly
+centred and the side groups can never shrink below their contents (below ~360 px the middle
+just shifts left instead of overflowing). It has `z-index: 35`, above the sheets (30/31) and `#result` (25), so it
 stays visible and tappable over every sheet and the results; `#result` has 64 px top padding
 so its box starts below it. No confirm: leaving keeps the seat (autopilot covers turns) and
 coming back resumes (see `resume()` below). `test_page_has_airplanemode_home_on_every_screen`
