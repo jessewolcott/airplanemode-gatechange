@@ -61,8 +61,11 @@ the lightest hand wins the round.
   wilds, saves action cards for the leader and names the airline it holds most; *hard* also
   hits a player about to go out, names airlines the next player has run out of, and challenges
   a +4 when the odds say it was a bluff.
-- **Phones lock and people wander off.** Your seat is tied to your browser, so a refresh or an
-  unlocked phone puts you straight back, autopilot off. An open page checks in at least every
+- **Your name.** If you picked a name and picture on the AirplaneMode menu, Gate Change fills
+  in the name and shows your picture on your seat.
+- **Phones lock and people wander off.** Your seat is tied to your browser (and, with a name
+  from the menu, to your phone), so a refresh, an unlocked phone or another browser on the
+  same phone puts you straight back, autopilot off. An open page checks in at least every
   20 seconds; after 45 seconds with no contact from your phone your seat shows as *away*, but
   that's only a label until your turn comes. On your turn a bot takes over (autopilot) if you're
   away, or if 60 seconds pass with nothing happening at the table (the clock restarts on any
@@ -75,7 +78,7 @@ the lightest hand wins the round.
 - **Rematch** keeps the table; *Change the table* goes back to the lobby.
 
 Everything is kept in memory: no accounts, no files, nothing written to disk. Idle tables go
-after 2 hours. The box keeps up to 200 tables; when it's full, a new table replaces the least
+after 2 hours; a table everyone has left goes about a minute after its last move. The box keeps up to 200 tables; when it's full, a new table replaces the least
 recently used lobby or finished game. A game in progress is never closed to make room: if all
 200 tables are mid-game, *Host a game* and *Play vs bots* say so until one finishes.
 

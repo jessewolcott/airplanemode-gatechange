@@ -1,6 +1,7 @@
 # Gate Change: how it's built (LLM / engineer reference)
 
-Checked-in notes, written from the code (release 0.1.2, 2026-11-22).
+Checked-in notes, written from the code (release 0.1.2, 2026-11-22; updated 2026-11-23 for
+`rooms.py` moving onto the platform's Rooms SDK, `amrooms`, not yet released).
 They're kept out of the container image by `.dockerignore` (`llm/`; its `*.md` pattern only
 matches files at the build-context root). If the code and these notes disagree, the code wins;
 fix the notes.
@@ -16,15 +17,18 @@ Tidewater, Starline, Summit, each with a colour *and* a glyph), with Delayed (sk
 "Last call!" rule.
 
 The backend is FastAPI in four small modules: `engine.py` (pure rules, ~440 lines),
-`bots.py` (pure bot decisions, ~140), `rooms.py` (rooms, seat tokens, long-poll, one asyncio
-"driver" task per started room, ~465) and `app.py` (HTTP, ~130). A table is a **room** with a
+`bots.py` (pure bot decisions, ~140), `rooms.py` (`GateRoom`: options, moves, view and the
+driver's plan, ~270, on top of the platform's `amrooms` package, which does seats, tokens,
+long-poll and the per-room asyncio "driver" task) and `app.py` (HTTP, ~150). A table is a **room** with a
 4-letter code. Each person gets a secret seat token kept in their browser; every request
 identifies the seat by it (`X-Player`). Clients **long-poll** `state?since=<version>` (returns
 as soon as the room version moves, or after 20 s). The server enforces every rule and sends
 each seat only its own view (`Game.view(seat)`): never other hands, the draw pile, or whether
 a +4 was a bluff. Bots play on the server with a human-feeling delay; a bot also plays the
 seat of anyone who leaves, goes quiet (45 s) or sits on their turn (60 s), until they take it
-back. Everything is in memory: no volume, no files, 64 MB limit. The whole UI is one file,
+back. If the person picked a name on the AirplaneMode menu (who's who, platform decision
+0021), their seat takes that name and emoji, and their other browsers on the same phone find
+the same seat. Everything is in memory: no volume, no files, 64 MB limit. The whole UI is one file,
 `static/index.html` (~1,000 lines of HTML/CSS/vanilla JS, inline SVG glyphs, no external assets).
 
 ## Files in this folder
@@ -33,7 +37,7 @@ back. Everything is in memory: no volume, no files, 64 MB limit. The whole UI is
 |---|---|
 | [architecture.md](architecture.md) | The pieces, request flow, process model, platform wiring, config |
 | [engine-and-rules.md](engine-and-rules.md) | `engine.py`: cards, deck, turn phases, every move, Last call, scoring, `view()` |
-| [rooms-and-long-poll.md](rooms-and-long-poll.md) | `rooms.py`: rooms, seats, tokens, lobby actions, long-poll, the driver, autopilot, expiry |
+| [rooms-and-long-poll.md](rooms-and-long-poll.md) | `rooms.py` on `amrooms`: seats, tokens, lobby actions, long-poll, the driver, autopilot, expiry |
 | [bots.md](bots.md) | `bots.py`: easy/normal/hard decisions, catching, public-information rule |
 | [api.md](api.md) | `app.py`: every endpoint, headers, status codes, response shapes |
 | [table-page.md](table-page.md) | `static/index.html`: screens, polling loop, rendering, hand, actions, results, a11y |
@@ -46,11 +50,12 @@ back. Everything is in memory: no volume, no files, 64 MB limit. The whole UI is
 |---|---|
 | `engine.py` | The rules (pure: no I/O, no clock, randomness only from the passed `rng`) |
 | `bots.py` | Bot decisions (pure functions of game + `rng`) |
-| `rooms.py` | Rooms, seats, long-poll, bot/autopilot driver, room registry (`Rooms`) |
+| `rooms.py` | `GateRoom(amrooms.Room)`: options, moves, view, bot/autopilot plan; `make_rooms()` builds the `amrooms.Rooms` registry |
+| `../airplanemode/sdk/rooms/` | `amrooms`, the platform's Rooms SDK (seats, tokens, presence, long-poll, driver loop, registry, `whois`); decision 0022 |
 | `app.py` | HTTP layer (FastAPI); module docstring lists the API |
 | `static/index.html` | The whole frontend; `static/icon.svg` the icon |
 | `tests/test_gatechange.py` | Engine, bot, room and API tests (plain script, no pytest) |
-| `Dockerfile`, `requirements.txt`, `.dockerignore` | Image (python:3.12-slim, fastapi 0.115.6, uvicorn 0.34.0) |
+| `Dockerfile`, `requirements.txt`, `.dockerignore` | Image (python:3.12-slim, fastapi 0.115.6, uvicorn 0.34.0, `amrooms` from the `rooms-v0.1.1` tag tarball, which brings httpx) |
 | `compose.yaml` | Standalone dev on `http://localhost:8771` |
 | `app.yaml` | AirplaneMode app manifest |
 | `.github/workflows/image.yml` | CI: tests, then multi-arch image to GHCR |

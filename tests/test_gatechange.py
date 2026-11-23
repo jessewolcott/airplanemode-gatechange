@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.update(GATECHANGE_BOT_DELAY="0", GATECHANGE_POLL_WAIT="0.3")
+os.environ.update(GATECHANGE_BOT_DELAY="0", GATECHANGE_POLL_WAIT="0.3", ADMIN_URL="")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -493,15 +493,15 @@ def test_lobby_and_multiplayer_game():
     assert v["state"] == "lobby" and v["you"] == 1 and not v["is_host"]
     assert [s["name"] for s in v["seats"]] == ["Jesse <b>", "Jesse <b> 2"]
     assert act(code, gt, type="add_bot").status_code == 409            # only the host
-    assert act(code, ht, type="add_bot", level="genius").status_code == 409
+    assert act(code, ht, type="add_bot", level="genius").status_code == 400
     ok(act(code, ht, type="add_bot", level="easy"))
     v = ok(act(code, ht, type="add_bot", level="hard"))
     assert [s["bot"] for s in v["seats"]] == [False, False, True, True]
     v = ok(act(code, ht, type="set_level", seat=2, level="normal"))
     assert v["seats"][2]["level"] == "normal"
-    assert act(code, ht, type="set_level", seat=1, level="hard").status_code == 409
+    assert act(code, ht, type="set_level", seat=1, level="hard").status_code == 400
     assert act(code, ht, type="remove", seat=0).status_code == 409
-    assert act(code, ht, type="remove", seat=True).status_code == 409
+    assert act(code, ht, type="remove", seat=True).status_code == 400
     v = ok(act(code, ht, type="remove", seat=3))
     assert len(v["seats"]) == 3
     v = ok(act(code, ht, type="options", mode="single", stack=True, draw_until=1, public=False))
@@ -600,13 +600,35 @@ def test_rejoin_leave_and_host_handover():
     assert c.get(f"/api/rooms/{code}/state", headers={"X-Player": gt}).status_code == 404
 
 
+def test_whos_who_names_seats_and_finds_your_seat():
+    people = {"phone": {"id": "p1", "name": "Sam", "avatar": "🦊"}}
+
+    async def fake_whois(request):
+        return people.get(request.headers.get("x-test-device"))
+    old, gc.whois = gc.whois, fake_whois
+    try:
+        sam = {**H, "X-Test-Device": "phone"}
+        r = ok(c.post("/api/rooms", json={"name": ""}, headers=sam))
+        code, t = r["code"], r["token"]
+        seat = state(code, t)["seats"][0]
+        assert seat["name"] == "Sam" and seat["avatar"] == "🦊", seat
+        # Sam's other browser has no token, but it's the same person: same seat
+        again = ok(c.post(f"/api/rooms/{code}/join", json={}, headers=sam))
+        assert again["token"] == t and len(state(code, t)["seats"]) == 1
+        # someone with no name on the box types one, as before
+        kt = ok(c.post(f"/api/rooms/{code}/join", json={"name": "Kim"}, headers=H))["token"]
+        assert [(s["name"], s["avatar"]) for s in state(code, kt)["seats"]] == [("Sam", "🦊"), ("Kim", None)]
+    finally:
+        gc.whois = old
+
+
 def test_autopilot_and_reclaim():
     r = ok(c.post("/api/rooms", json={"name": "Sleepy"}, headers=H))
     code, t = r["code"], r["token"]
     ok(act(code, t, type="add_bot", level="easy"))
     room = gc.rooms.get(code)
-    old = rooms.IDLE_TURN
-    rooms.IDLE_TURN = 0.2
+    old = rooms.GateRoom.idle_turn
+    rooms.GateRoom.idle_turn = 0.2
     try:
         ok(act(code, t, type="start"))
         wait_until(lambda: room.game.current == 0)
@@ -621,7 +643,7 @@ def test_autopilot_and_reclaim():
         assert again["token"] == t and not room.seats[0].auto
         assert not state(code, t)["seats"][0]["auto"]
     finally:
-        rooms.IDLE_TURN = old
+        rooms.GateRoom.idle_turn = old
 
 
 def test_bots_catch_a_missed_last_call():
@@ -653,8 +675,8 @@ def test_next_round_when_nobody_is_here():
     ok(act(code, t, type="start"))                         # first to 500: rounds go on
     room = gc.rooms.get(code)
     wait_until(lambda: room.game.current == 0 and room.game.turn_phase == "turn")
-    old = rooms.AWAY_AFTER, rooms.AUTO_NEXT_ROUND
-    rooms.AWAY_AFTER, rooms.AUTO_NEXT_ROUND = 0.5, 0.05
+    old = rooms.GateRoom.away_after, rooms.GateRoom.auto_next_round
+    rooms.GateRoom.away_after, rooms.GateRoom.auto_next_round = 0.5, 0.05
     try:
         rig(room.game, [["sun.1"], ["tide.1", "tide.2"]], top="sun.5")
         ok(act(code, t, type="play", card="sun.1"))
@@ -663,31 +685,45 @@ def test_next_round_when_nobody_is_here():
         assert room.game.phase == "round_over"
         wait_until(lambda: room.game.round >= 2, 3)        # then they're away: the table moves on
     finally:
-        rooms.AWAY_AFTER, rooms.AUTO_NEXT_ROUND = old
+        rooms.GateRoom.away_after, rooms.GateRoom.auto_next_round = old
     room.close()
     # on autopilot counts as not here too: a whole match to 500 plays out with nobody pressing
     r = ok(c.post("/api/rooms", json={"name": "Autopilot"}, headers=H))
     code, t = r["code"], r["token"]
     ok(act(code, t, type="add_bot", level="easy"))
     room = gc.rooms.get(code)
-    old_idle = rooms.IDLE_TURN
-    rooms.AUTO_NEXT_ROUND, rooms.IDLE_TURN = 0.01, 0.05    # the driver puts them on autopilot
+    old_idle = rooms.GateRoom.idle_turn
+    rooms.GateRoom.auto_next_round, rooms.GateRoom.idle_turn = 0.01, 0.05    # the driver puts them on autopilot
     try:
         ok(act(code, t, type="start"))
         wait_until(lambda: room.seats[0].auto, 3)
         wait_until(lambda: room.game.phase == "game_over", 20)
         assert room.game.round >= 2 and room.seats[0].auto
     finally:
-        rooms.AUTO_NEXT_ROUND, rooms.IDLE_TURN = old[1], old_idle
+        rooms.GateRoom.auto_next_round, rooms.GateRoom.idle_turn = old[1], old_idle
         room.close()
+
+
+def test_a_table_everyone_left_pauses_then_goes():
+    r = ok(c.post("/api/rooms", json={"name": "Gone", "solo": True}, headers=H))
+    code, t = r["code"], r["token"]
+    room = gc.rooms.get(code)
+    ok(act(code, t, type="leave"))
+    time.sleep(0.2)
+    v = room.version
+    time.sleep(0.4)
+    assert room.version == v                               # bots don't play on for nobody
+    assert room.code in gc.rooms.rooms                     # the last person can still come back
+    gc.rooms.sweep(time.monotonic() + gc.rooms.empty_grace + 1)
+    assert room.code not in gc.rooms.rooms
 
 
 def test_full_server_never_closes_a_live_game():
     for room in gc.rooms.rooms.values():
         room.close()
     gc.rooms.rooms.clear()
-    old_max = rooms.MAX_ROOMS
-    rooms.MAX_ROOMS = 3
+    old_max = gc.rooms.max_rooms
+    gc.rooms.max_rooms = 3
     new_room = lambda **kw: c.post("/api/rooms", json={"name": "P", **kw}, headers=H)
     try:
         lobby = ok(new_room())["code"]
@@ -703,21 +739,21 @@ def test_full_server_never_closes_a_live_game():
         ok(new_room())
         assert live[1] not in gc.rooms.rooms and live[0] in gc.rooms.rooms and live[2] in gc.rooms.rooms
     finally:
-        rooms.MAX_ROOMS = old_max
+        gc.rooms.max_rooms = old_max
 
 
 def test_rooms_are_capped_and_expire():
-    old_max, old_idle = rooms.MAX_ROOMS, rooms.ROOM_IDLE
-    rooms.MAX_ROOMS = 5
+    old_max, old_idle = gc.rooms.max_rooms, gc.rooms.idle
+    gc.rooms.max_rooms = 5
     try:
         for i in range(8):
             ok(c.post("/api/rooms", json={"name": f"P{i}"}, headers=H))
         assert len(gc.rooms.rooms) <= 5
-        rooms.ROOM_IDLE = -1
+        gc.rooms.idle = -1
         gc.rooms.sweep()
         assert len(gc.rooms.rooms) == 0
     finally:
-        rooms.MAX_ROOMS, rooms.ROOM_IDLE = old_max, old_idle
+        gc.rooms.max_rooms, gc.rooms.idle = old_max, old_idle
 
 
 if __name__ == "__main__":

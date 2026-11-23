@@ -21,21 +21,30 @@ Engine:
 
 Rooms and driver:
 - **Single process only.** Rooms, locks and Events are in-process. Don't add `--workers`.
-- **Room eviction never kills a live game**: at `MAX_ROOMS` (200) creating a room closes the
-  least recently touched lobby or finished (`game_over`) room. A game in progress (`playing`
-  or `round_over`) is never evicted; if all rooms are live, `create` raises `RoomsFull` and
-  the API answers 503 (page: error toast). A lobby with people waiting *can* be evicted.
-- **No background sweeper**: idle rooms are only dropped when someone creates a room, lists
-  open games, or a close happens via `act`. A closed room is invisible (`get` returns None)
-  even before it's swept.
+- **Room mechanics live in `amrooms`** (`../airplanemode/sdk/rooms`). A change to seats,
+  leaving, presence, the driver loop or eviction is an SDK release, a pin bump in
+  `requirements.txt` and an app release (Passport uses it too). Game rules stay here.
+- **Room eviction never kills a live game**: at `rooms.max_rooms` (200) creating a room
+  closes the least recently touched lobby or finished (`game_over`) room. A game in progress
+  (`playing` or `round_over`) is never evicted; if all rooms are live, `create` raises
+  `RoomError(503)` (page: error toast). A lobby with people waiting *can* be evicted.
+- **Sweeping**: a background task (`rooms.sweep_forever()`, every 5 s, started in `app.py`'s
+  lifespan) plus `create`, the open-games list and every `leave`. An empty lobby goes at
+  once. A game everyone left is kept until nothing has changed for 60 s, but bots keep
+  playing its seats, so in practice it lives until `game_over` + 60 s (or 2 h idle). A
+  closed room is invisible (`get` answers 404) even before it's swept.
+- **Who's who** (`whois`, platform decision 0021): a seat takes the person's name (when none
+  is typed) and emoji, and the same person id finds its seat without a token. A rejoin with a
+  who's who answer also renames the seat to that name. It's a label only; tests set
+  `ADMIN_URL=""` and replace `gc.whois` to fake it.
 - **`next_round`**: any seated person can press it. If every human is on autopilot, left, or
-  away (no contact for `AWAY_AFTER`), the driver presses it `AUTO_NEXT_ROUND` (8 s, a module
-  constant, no env var) after the round ended, or once the last present person turns away,
+  away (no contact for `away_after`), the driver presses it `auto_next_round` (8 s, a class
+  attribute, no env var) after the round ended, or once the last present person turns away,
   whichever is later.
 - **The idle-turn timer restarts on any room change** (`changed_at`), e.g. another player's
   Last call or a join/rejoin, so 60 s is "since the last change", not "since your turn began".
 - **Autopilot only kicks in on your turn.** `away` is just a display flag until then.
-- **Rejoin reclaims**: `join` with the token clears `left` and `auto`. The page's `resume()`
+- **Rejoin reclaims**: `join` with the token (or a who's who match) clears `left` and `auto`. The page's `resume()`
   calls it on load and on every visibilitychange to visible, so a refresh or an unlocked
   phone takes the seat back. Merely polling `state` does not reclaim.
 - **`_bot_move` fallback isn't atomic**: if a bot's `call` succeeded and its `play` failed,
@@ -43,9 +52,10 @@ Rooms and driver:
 - **A removed person's long-poll ends in 404** "This game has ended." (the page says "That
   table has closed."), same as a closed room.
 - **Names aren't HTML-stripped**; every place the page prints a name must use `esc()`.
-- Tests change timings by assigning module globals (`rooms.IDLE_TURN`, `rooms.MAX_ROOMS`,
-  `rooms.ROOM_IDLE`, `bots.CATCH_CHANCE[...]`) and restore them in `finally`; `rooms.py`
-  reads them at call time, so that works. Env vars only matter before import.
+- Tests change timings by assigning class and registry attributes
+  (`rooms.GateRoom.idle_turn`, `.away_after`, `.auto_next_round`, `gc.rooms.max_rooms`,
+  `gc.rooms.idle`) and `bots.CATCH_CHANCE[...]`, and restore them in `finally`; the code reads
+  them at call time, so that works. Env vars only matter before import.
 
 Page:
 - **The relative-URL test is strict**: no `"/api/`, `'/api/` or `` `/api/ ``, and no
@@ -87,21 +97,23 @@ Platform:
   `test_bot_games_always_finish` rule mix.
 
 ### Add a lobby/host action
-- `Room.act` under `self.game is None` (host check already applies); validate seat args with
-  `_seat_arg`. Raise `IllegalMove` for refusals (409) and `PermissionError` only for "not
-  at this table" (403).
+- `GateRoom.act` under `self.game is None` (host check already applies); validate seat args
+  with the SDK's `seat_arg` (`RoomError(400)`). Raise `IllegalMove` for refusals (409) or
+  `RoomError(status, message)` when another status fits; "not at this table" (403) already
+  comes from `need_seat`.
 
 ### Change bot behaviour
 - Keep `decide` pure and public-information only. Re-run the 400-game test and the hard vs
   easy test; adjust `test_bot_choices` if a deliberate choice changes.
 
 ### Change timing
-- Bot pacing: `BOT_DELAY` and the `uniform(0.75, 1.3)` jitter in `changed()`, the
-  `1.5 * BOT_DELAY` catch grace in `_plan`, the `uniform(0.7, 2.0)` catch window in
-  `_watch_exposure`. Autopilot: `AWAY_AFTER`, `IDLE_TURN`. Poll: `POLL_WAIT` (keep it well
-  below `AWAY_AFTER`, or attentive players will be marked away).
-- New env var: read it at the top of `rooms.py`, document it in `app.yaml` `env:` and the
-  README settings table, and in the platform `compose.yaml` if the box needs a non-default.
+- Bot pacing: `GateRoom.bot_delay` and the `uniform(0.75, 1.3)` jitter in `changed()`, the
+  `1.5 * bot_delay` catch grace in `_plan`, the `uniform(0.7, 2.0)` catch window in
+  `_watch_exposure`. Autopilot: `away_after`, `idle_turn`. Poll: `poll_wait` (keep it well
+  below `away_after`, or attentive players will be marked away).
+- New env var: read it with `env_float` as a `GateRoom` class attribute (or in `make_rooms()`
+  for the registry), document it in `app.yaml` `env:` and the README settings table, and in
+  the platform `compose.yaml` if the box needs a non-default.
 
 ### Change the look
 - Keep the original identity: no commercial game name, logo, card design, or

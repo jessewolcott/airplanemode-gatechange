@@ -5,11 +5,14 @@
 A plain script, not pytest: `python tests/test_gatechange.py` (or
 `.venv\Scripts\python tests\test_gatechange.py`). Needs `requirements.txt` plus
 `httpx==0.28.1` for FastAPI's `TestClient`. Venv: `py -3.10 -m venv .venv`, then
-`pip install -r requirements.txt httpx==0.28.1` (git-ignored).
+`pip install -r requirements.txt httpx==0.28.1` (git-ignored). `requirements.txt` pulls
+`amrooms` from the platform's `rooms-v0.1.1` tag tarball; while changing the SDK too, use
+`.venv\Scripts\pip install -e ../airplanemode/sdk/rooms` instead.
 
 How it works:
-- Sets `GATECHANGE_BOT_DELAY=0` and `GATECHANGE_POLL_WAIT=0.3` **before** importing, so
-  bots move instantly and long-polls return fast.
+- Sets `GATECHANGE_BOT_DELAY=0`, `GATECHANGE_POLL_WAIT=0.3` and `ADMIN_URL=""` **before**
+  importing, so bots move instantly, long-polls return fast and `whois` never calls out
+  (the who's who test swaps in a fake `gc.whois`).
 - `__main__` runs every `test_*` in definition order inside one `TestClient(gc.app)` (the
   context manager gives the app a running event loop, which the driver tasks need), prints
   ok/FAIL per test, exits 1 on any failure. API tests share the one `gc.rooms` registry.
@@ -40,15 +43,17 @@ How it works:
 | `test_page_has_airplanemode_home_on_every_screen` | each of `#home`, `#lobby`, `#table` holds an `a.am-home` with `href="../"` and `aria-label="AirplaneMode home"`; the page calls `resume()` on `pageshow` (coming back rejoins the stored seat) |
 | `test_page_keeps_its_own_identity` | the commercial game's name never appears as a whole word (`\buno\b`, case-insensitive); the four `--sun/--tide/--star/--peak` hex colours don't fall one each into red/yellow/green/blue hue bands (`hue_family`) |
 | `test_header_and_tokens_required` | 403 without header/token, 404 unknown room, 400 non-object body |
-| `test_lobby_and_multiplayer_game` | code alphabet, open-games listing, join (lowercase code, duplicate name suffix, HTML kept as text), host-only lobby actions, options, private rooms unlisted, late join 409, per-seat hands, illegal move leaves `version` unchanged, two people + a bot play a whole single round, rematch host-only, back to lobby |
+| `test_lobby_and_multiplayer_game` | code alphabet, open-games listing, join (lowercase code, duplicate name suffix, HTML kept as text), host-only lobby actions (bad level / seat -> 400, removing the host -> 409), options, private rooms unlisted, late join 409, per-seat hands, illegal move leaves `version` unchanged, two people + a bot play a whole single round, rematch host-only, back to lobby |
 | `test_long_poll` | same version waits >= 0.25 s; old version returns at once |
 | `test_solo_game_vs_bots` | solo room starts with 3 bots, unlisted; human plays to 500 (accepts 409 when a bot moved first) |
 | `test_rejoin_leave_and_host_handover` | rejoin with token keeps the seat; host leaves -> guest is host; last person leaves -> 404 |
-| `test_autopilot_and_reclaim` | with `rooms.IDLE_TURN = 0.2` the idle seat goes auto, a bot plays it, `reclaim` restores; rejoining with the token also clears `auto` |
+| `test_whos_who_names_seats_and_finds_your_seat` | with a fake `whois`: an empty name takes the who's who name and emoji; the same person joining without a token gets the same token and seat; someone without a name types one (`avatar` null) |
+| `test_autopilot_and_reclaim` | with `rooms.GateRoom.idle_turn = 0.2` the idle seat goes auto, a bot plays it, `reclaim` restores; rejoining with the token also clears `auto` |
 | `test_bots_catch_a_missed_last_call` | with hard catch chance 1.0, a forgotten call is caught by a bot (+2) |
-| `test_next_round_when_nobody_is_here` | at `round_over` the table waits while the person is present; once they're away (`AWAY_AFTER = 0.5`) the driver starts the next round; with the person on autopilot a whole match to 500 plays out unattended |
-| `test_full_server_never_closes_a_live_game` | `MAX_ROOMS = 3`: lobbies are evicted first, games in progress never; all live -> 503 with a clear detail; a `game_over` room can be evicted (clears the registry first) |
-| `test_rooms_are_capped_and_expire` | `MAX_ROOMS = 5` caps the registry; `ROOM_IDLE = -1` sweeps everything |
+| `test_next_round_when_nobody_is_here` | at `round_over` the table waits while the person is present; once they're away (`GateRoom.away_after = 0.5`) the driver starts the next round; with the person on autopilot a whole match to 500 plays out unattended |
+| `test_a_table_everyone_left_pauses_then_goes` | a solo table whose person leaves: the version stops moving (bots pause), the room stays for the grace minute, then a sweep 61 s later drops it |
+| `test_full_server_never_closes_a_live_game` | `gc.rooms.max_rooms = 3`: lobbies are evicted first, games in progress never; all live -> 503 with a clear detail; a `game_over` room can be evicted (clears the registry first) |
+| `test_rooms_are_capped_and_expire` | `gc.rooms.max_rooms = 5` caps the registry; `gc.rooms.idle = -1` sweeps everything |
 
 Not covered by tests: the page's JavaScript (rendering, polling loop, hand layout, toasts),
 long-poll through Caddy, real network latency. Check those by hand in a browser at phone
@@ -72,7 +77,7 @@ Port 8000 is reserved by Windows on Jesse's machine; that's why the standalone p
 ## Image
 
 `Dockerfile`: `python:3.12-slim`, `pip install -r requirements.txt` (fastapi 0.115.6, uvicorn
-0.34.0), `COPY . .`, user `gatechange` (uid 10001), `EXPOSE 8000`, single uvicorn process.
+0.34.0, `amrooms` from a tag tarball, so no git in the image; it brings httpx), `COPY . .`, user `gatechange` (uid 10001), `EXPOSE 8000`, single uvicorn process.
 `.dockerignore` drops `.git`, `.github`, `.vscode`, `.venv`, `tests`, `__pycache__`,
 top-level `*.md`, `compose.yaml`, `docs`, `llm/`. No volume, no healthcheck in the image
 (`/health` exists for callers).
@@ -97,5 +102,6 @@ Released so far: 0.1.0, 0.1.1 (rejoin reclaims, unattended rounds advance, live 
 ## Untested (from CLAUDE.md / README)
 
 Not tried on real phones or the R6S: touch feel of the hand fan, long-poll through Caddy on
-the box, phones locking mid-game, memory under load on the device (CLAUDE.md quotes ~31 MiB
+the box, phones locking mid-game, who's who seat names and finding your seat from another
+browser on the same phone, memory under load on the device (CLAUDE.md quotes ~31 MiB
 with 10 live tables, measured in dev), the GL.iNet 48m limit.

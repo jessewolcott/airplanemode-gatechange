@@ -16,3 +16,4 @@ env:
   GATECHANGE_ROOM_IDLE: Seconds a room may sit untouched before it is dropped (default 7200, 2 hours).
   GATECHANGE_POLL_WAIT: Seconds a long-poll waits for a change before answering (default 20); keep it well under GATECHANGE_AWAY.
   GATECHANGE_SEED: Fixed seed for repeatable deals, for testing (default empty: random).
+  ADMIN_URL: The admin service, for who's who names on seats (default http://admin:8000; empty turns it off).

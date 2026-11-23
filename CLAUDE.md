@@ -14,11 +14,16 @@ environment notes and `docs/app-contract.md` for the rules.
   `Game.view(seat)` is the only thing that goes to a player.
 - `bots.py`: easy/normal/hard. Pure functions of the game and an `rng`; they may only use
   public information (own hand, discards, hand sizes, scores, `game.voids`).
-- `rooms.py`: rooms, seat tokens, long-poll (`Room.wait`), and one driver task per started
-  room (bot moves, bot catches, autopilot takeover, Next round when no person is here).
-  At `MAX_ROOMS` only lobbies/finished games are evicted; a live game never is (`RoomsFull`
-  -> 503).
-- `app.py`: HTTP. Token in `X-Player`; POSTs need `X-GateChange: 1`.
+- `rooms.py`: `GateRoom`, built on `amrooms` (the platform's Rooms SDK, `../airplanemode/sdk/rooms`,
+  decision 0022). The SDK does seats, tokens, host, leave/rejoin, presence, long-poll, the
+  driver loop and the registry; `GateRoom` adds options, moves, the view and the driver's
+  plan (bot moves, bot catches, autopilot takeover, Next round when no person is here).
+  Settings are class attributes (`GateRoom.away_after`, `idle_turn`, ...) and registry
+  attributes (`rooms.max_rooms`, `rooms.idle`). At the room cap only lobbies/finished games
+  are evicted; a live game never is (SDK `RoomError(503)`).
+- `app.py`: HTTP. Token in `X-Player`; POSTs need `X-GateChange: 1`. Calls `whois()` (who's
+  who name and emoji from the admin's `/api/me`) before create/join; maps `RoomError` to its
+  status; runs the room sweeper in its lifespan.
 
 ## Commands
 
@@ -28,7 +33,9 @@ docker compose up -d --build                    # standalone dev: http://localho
 ```
 
 The venv (`py -3.10 -m venv .venv`, then `pip install -r requirements.txt httpx==0.28.1`)
-is git-ignored.
+is git-ignored. `requirements.txt` pins `amrooms` from the platform's `rooms-v0.1.1` tag
+tarball; while changing the SDK and this app together, install it editable instead:
+`.venv\Scripts\pip install -e ../airplanemode/sdk/rooms`.
 
 ## Rules
 
@@ -51,7 +58,9 @@ is git-ignored.
 ## Untested
 
 Not tried on real phones or the R6S yet: touch feel of the hand fan, long-poll behaviour through
-Caddy on the box, phones locking mid-game (autopilot should cover it).
+Caddy on the box, phones locking mid-game (autopilot should cover it), who's who seat names
+and getting your seat back from another browser on the same phone (rests on the platform's
+MAC lookup, decision 0021).
 
 ## Releasing
 

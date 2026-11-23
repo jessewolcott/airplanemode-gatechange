@@ -70,6 +70,7 @@
   .tag.you { background: #ffd23f22; color: var(--sign); }
   .av { width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 800; color: #0b1017; background: hsl(var(--h, 200) 70% 72%); position: relative; }
   .av.bot { border-radius: 12px; }
+  .av.emo { font-size: 1.3rem; font-weight: 400; line-height: 1; }
   .av svg { width: 20px; height: 20px; }
 
   /* toasts */
@@ -634,7 +635,7 @@ function renderLobby(v) {
       ? `<span class="seg">${Object.entries(LEVELS).map(([k, l]) => `<button data-lvl="${k}" data-seat="${i}" aria-pressed="${s.level === k}">${l}</button>`).join("")}</span>`
       : `<span class="tag">${LEVELS[s.level]} bot</span>`) : "";
     const rm = host && !s.host ? `<button class="x" data-rm="${i}" aria-label="Remove ${esc(s.name)}">×</button>` : "";
-    return `<li class="seat"><span class="av ${s.bot ? "bot" : ""}" style="--h:${hue(s.name)}">${s.bot ? glyph("bot") : esc(s.name.slice(0, 1).toUpperCase())}</span>
+    return `<li class="seat"><span class="av ${s.bot ? "bot" : ""}${s.avatar ? " emo" : ""}" style="--h:${hue(s.name)}">${s.bot ? glyph("bot") : s.avatar ? esc(s.avatar) : esc(s.name.slice(0, 1).toUpperCase())}</span>
       <span class="nm"><b>${esc(s.name)}</b>${s.host ? `<span class="tag host">host</span>` : ""}${i === v.you ? `<span class="tag you">you</span>` : ""}</span>${lvl}${rm}</li>`;
   });
   if (v.seats.length < 8) rows.push(`<li class="seat emptyseat">${8 - v.seats.length} seats open</li>`);
@@ -737,7 +738,7 @@ function renderTable(v) {
     const flag = exposed ? `<span class="flag ex">1 card!</span>` : g.counts[i] === 1 ? `<span class="flag">Last call</span>` : "";
     return `<div class="opp ${turn ? "turn" : ""} ${g.counts[i] === 1 ? "one" : ""}" aria-label="${esc(s.name)}, ${g.counts[i]} cards${turn ? ", playing" : ""}">
       <span class="score">${g.target ? g.scores[i] : ""}</span>
-      <span class="av ${s.bot ? "bot" : ""}" style="--h:${hue(s.name)}">${s.bot ? glyph("bot") : esc(s.name.slice(0, 1).toUpperCase())}</span>
+      <span class="av ${s.bot ? "bot" : ""}${s.avatar ? " emo" : ""}" style="--h:${hue(s.name)}">${s.bot ? glyph("bot") : s.avatar ? esc(s.avatar) : esc(s.name.slice(0, 1).toUpperCase())}</span>
       <span class="nm">${esc(s.name)}</span>
       <span class="cc ${prev[i] !== g.counts[i] ? "bump" : ""}">${cardHTML("back")}${g.counts[i]}</span>
       <span class="st">${turn && g.phase === "playing" ? `<span class="thinking">${s.bot || s.auto ? "thinking" : "playing"}</span>` : esc(state)}</span>
@@ -885,7 +886,7 @@ function scoreRows(v, showHands) {
     const win = res && res.winner === i;
     const left = showHands && res ? res.hands[i] : null;
     return `<div class="srow ${win ? "win" : ""}">
-      <span class="av ${s.bot ? "bot" : ""}" style="--h:${hue(s.name)}">${s.bot ? glyph("bot") : esc(s.name.slice(0, 1).toUpperCase())}</span>
+      <span class="av ${s.bot ? "bot" : ""}${s.avatar ? " emo" : ""}" style="--h:${hue(s.name)}">${s.bot ? glyph("bot") : s.avatar ? esc(s.avatar) : esc(s.name.slice(0, 1).toUpperCase())}</span>
       <div><b>${esc(s.name)}</b>${i === v.you ? ` <span class="tag you">you</span>` : ""}
         ${left && left.length ? `<div class="left">${left.map(c => cardHTML(c, "mini")).join("")}</div>` : ""}
         ${g.target ? `<div class="meter"><i style="width:${Math.min(100, g.scores[i] / top * 100)}%"></i></div>` : ""}</div>
@@ -974,6 +975,8 @@ function showRules() {
 
 // ---------- wiring ----------
 $("#name").value = store.get("name", "");
+// who's who: the name picked on the AirplaneMode menu (it also labels your seat on the server)
+fetch("../api/me").then(r => r.ok ? r.json() : null).then(me => { if (me && me.known) $("#name").value = me.name; }).catch(() => {});
 $("#solo").onclick = () => startRoom(true);
 $("#host").onclick = () => startRoom(false);
 $("#join").onclick = () => joinRoom($("#joincode").value);

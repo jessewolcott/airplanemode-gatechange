@@ -13,20 +13,33 @@ API (relative to the app's root; the platform serves it at /gatechange/):
 The seat token goes in the "X-Player" header (and in join's body to rejoin). POSTs also need
 "X-GateChange: 1" (blocks cross-site requests).
 """
+import asyncio
+import contextlib
 import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
+from amrooms import RoomError, whois
+
 from engine import IllegalMove
-from rooms import Rooms, RoomsFull
+from rooms import SOLO_BOTS, make_rooms
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 HERE = Path(__file__).parent
-app = FastAPI(title="Gate Change", docs_url=None, redoc_url=None, openapi_url=None)
-rooms = Rooms()
+rooms = make_rooms()
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_app):
+    task = asyncio.create_task(rooms.sweep_forever())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="Gate Change", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
 
 def need_header(request: Request):
@@ -45,10 +58,7 @@ async def body(request: Request):
 
 
 def room_or_404(code):
-    room = rooms.get(code)
-    if room is None:
-        raise HTTPException(404, "No game with that code (it may have ended).")
-    return room
+    return rooms.get(code)          # RoomError 404 if there is none
 
 
 @app.get("/health")
@@ -58,31 +68,32 @@ async def health():
 
 @app.get("/api/rooms")
 async def open_games():
-    return {"rooms": rooms.open_games()}
+    return {"rooms": [r.summary() for r in rooms.open_lobbies()]}
 
 
 @app.post("/api/rooms")
 async def create(request: Request):
     need_header(request)
     data = await body(request)
-    try:
-        room = rooms.create(data.get("name"), public=data.get("public", True) is not False,
-                            solo=data.get("solo") is True)
-    except RoomsFull as e:
-        raise HTTPException(503, str(e))
-    return {"code": room.code, "token": room.host.token}
+    who = await whois(request)
+    solo = data.get("solo") is True
+    room = rooms.create(public=data.get("public", True) is not False and not solo)
+    token = room.join(data.get("name"), who=who)
+    if solo:
+        for _ in range(SOLO_BOTS):
+            room.add_bot("normal")
+        room.start()
+    return {"code": room.code, "token": token}
 
 
 @app.post("/api/rooms/{code}/join")
 async def join(code: str, request: Request):
     need_header(request)
     data = await body(request)
+    who = await whois(request)
     room = room_or_404(code)
     async with room.lock:
-        try:
-            token = room.join(data.get("name"), data.get("token") or request.headers.get("x-player"))
-        except IllegalMove as e:
-            raise HTTPException(409, str(e))
+        token = room.join(data.get("name"), data.get("token") or request.headers.get("x-player"), who=who)
     return {"code": room.code, "token": token}
 
 
@@ -108,16 +119,17 @@ async def act(code: str, request: Request):
     async with room.lock:
         try:
             room.act(token, data)
-        except PermissionError as e:
-            raise HTTPException(403, str(e))
         except IllegalMove as e:
             raise HTTPException(409, str(e))
-        if room.closed:
-            rooms.sweep()
-            return {"left": True}
         if data.get("type") == "leave":
+            rooms.sweep()               # an empty lobby goes at once
             return {"left": True}
         return room.view(token)
+
+
+@app.exception_handler(RoomError)
+async def room_error(_req, exc):
+    return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
 
 @app.exception_handler(HTTPException)
