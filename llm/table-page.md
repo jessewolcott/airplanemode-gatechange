@@ -24,6 +24,15 @@ are as of 0.1.0.
 
 `show(id)` toggles `#home`, `#lobby`, `#table` and hides the result overlay off the table.
 
+Every screen has the **AirplaneMode home button** (`a.am-home`, `href="../"`, app contract
+item 10): a fixed 44 px house at the top right of `#home` (`.am-home.float`), and the last
+item in the right-hand group (`.bar .end`) of the lobby bar (after Rules) and the table bar
+(after Scores). It has `z-index: 35`, above the sheets (30/31) and `#result` (25), so it
+stays visible and tappable over every sheet and the results; `#result` has 64 px top padding
+so its box starts below it. No confirm: leaving keeps the seat (autopilot covers turns) and
+coming back resumes (see `resume()` below). `test_page_has_airplanemode_home_on_every_screen`
+checks each section has one.
+
 - **Home** (`#home`): name field (stored), **Play vs bots** (`startRoom(true)`), **Host a
   game** (`startRoom(false)`, public), 4-letter code + Join, the open-games list
   (`refreshOpen`, `GET api/rooms` every 4 s while home is shown), How to play. A URL hash
@@ -33,7 +42,7 @@ are as of 0.1.0.
   (Length one round / to 500, Stack +2 on +2, Draw until you can play, List on this
   hotspot), Start (disabled under 2 seats). Non-hosts see disabled controls and "Waiting
   for <host> to start...".
-- **Table** (`renderTable`, `:683`): top bar (menu, code, round info, Scores), autopilot
+- **Table** (`renderTable`, `:683`): top bar (menu, code, round info, Scores + home), autopilot
   banner with **Take my seat back**, opponents strip in turn order after you (score, avatar,
   name, card count with bump animation, state: thinking/playing/away/autopilot/left/bot
   level, "1 card!" or "Last call" flag), direction arrows + ring, draw pile (`N LEFT`,
@@ -60,8 +69,9 @@ seat).
 - `poll(gen)` (`:553`): loop while `gen === S.gen`: `GET api/rooms/{code}/state?since=S.ver`
   with `X-Player`. 403/404 -> `endSession("That table has closed.")`. Other failures back
   off `min(5 s, 0.8 s * fails)`. Each start of a poll loop bumps `S.gen`, which retires the
-  previous loop at its next check (`enter`, page load with a stored session, and
-  `visibilitychange` back to visible all restart it). The last two go through `resume()`,
+  previous loop at its next check (`enter`, page load with a stored session,
+  `visibilitychange` back to visible and `pageshow` from the back/forward cache all restart
+  it). The last three go through `resume()`,
   which first POSTs `join` with the stored token (taking the seat back from autopilot;
   errors ignored, a closed table then 404s in `poll`).
 - `act(move)` (`:567`): single-flight (`S.busy`); POST `act`; `{left: true}` ends the session;

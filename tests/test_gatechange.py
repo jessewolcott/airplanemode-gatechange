@@ -435,6 +435,16 @@ def test_page_and_health():
     assert c.get("/icon.svg").headers["content-type"].startswith("image/svg")
 
 
+def test_page_has_airplanemode_home_on_every_screen():
+    html = c.get("/").text
+    home = re.compile(r'<a class="am-home[^"]*" href="\.\./"[^>]*aria-label="AirplaneMode home"')
+    for screen in ("home", "lobby", "table"):
+        m = re.search(rf'<section id="{screen}".*?</section>', html, re.S)
+        assert m and home.search(m.group(0)), f"no AirplaneMode home link on #{screen}"
+    # coming back from the menu (or the back/forward cache) rejoins the stored seat
+    assert "resume()" in html and '"pageshow"' in html
+
+
 def hue_family(hex_colour):
     r, g, b = (int(hex_colour[i:i + 2], 16) / 255 for i in (0, 2, 4))
     h, _, _ = colorsys.rgb_to_hls(r, g, b)
