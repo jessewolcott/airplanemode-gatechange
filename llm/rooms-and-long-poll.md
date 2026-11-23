@@ -57,7 +57,7 @@ move by the person clears their `auto` and `left`. `changed()` runs only if noth
 - If the host left, the next human who hasn't left becomes host.
 - If no human who hasn't left remains, `closed = True`; `app.act` then sweeps the room.
 
-### `view(token)` (`:255`)
+### `view(token)` (`:263`)
 
 Refreshes the caller's `last_seen` and the room's `touched`. Returns `code, version,
 state` (`lobby` or the engine `phase`), `you` (seat index), `is_host, public, options,
@@ -73,7 +73,7 @@ Event up to `POLL_WAIT` (20 s). The `state` endpoint calls `view` before waiting
 present) and again after, so a person with an open page refreshes `last_seen` at least every
 ~20 s, well inside `AWAY_AFTER`. `since=-1` (the default) always returns immediately.
 
-## The driver (`_drive`, `:356`)
+## The driver (`_drive`, `:374`)
 
 One asyncio task per started room. Loop while not closed and `game` is set:
 

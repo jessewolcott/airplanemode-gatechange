@@ -60,7 +60,7 @@ FastAPI's docs/OpenAPI endpoints are disabled (`app.py:28`).
 ## How it plugs into the platform
 
 - Platform `compose.yaml` service `gatechange`: image
-  `ghcr.io/jessewolcott/airplanemode-gatechange:0.1.0` (pinned), `mem_limit
+  `ghcr.io/jessewolcott/airplanemode-gatechange:0.1.2` (pinned), `mem_limit
   ${GATECHANGE_MEM:-64m}`, `restart: unless-stopped`, no env, no volume.
   `hardware/nanopi-r6s.env` sets `GATECHANGE_MEM=64m`, `hardware/glinet.env` `48m`.
 - Platform `compose.dev.yaml` builds this repo as `airplanemode-gatechange:dev`.

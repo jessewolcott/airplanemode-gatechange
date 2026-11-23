@@ -1,6 +1,6 @@
 # Gate Change: how it's built (LLM / engineer reference)
 
-Checked-in notes, written from the code (release 0.1.0 plus the fixes after it, 2026-11-22).
+Checked-in notes, written from the code (release 0.1.2, 2026-11-22).
 They're kept out of the container image by `.dockerignore` (`llm/`; its `*.md` pattern only
 matches files at the build-context root). If the code and these notes disagree, the code wins;
 fix the notes.
@@ -17,7 +17,7 @@ Tidewater, Starline, Summit, each with a colour *and* a glyph), with Delayed (sk
 
 The backend is FastAPI in four small modules: `engine.py` (pure rules, ~440 lines),
 `bots.py` (pure bot decisions, ~140), `rooms.py` (rooms, seat tokens, long-poll, one asyncio
-"driver" task per started room, ~440) and `app.py` (HTTP, ~130). A table is a **room** with a
+"driver" task per started room, ~465) and `app.py` (HTTP, ~130). A table is a **room** with a
 4-letter code. Each person gets a secret seat token kept in their browser; every request
 identifies the seat by it (`X-Player`). Clients **long-poll** `state?since=<version>` (returns
 as soon as the room version moves, or after 20 s). The server enforces every rule and sends
@@ -25,7 +25,7 @@ each seat only its own view (`Game.view(seat)`): never other hands, the draw pil
 a +4 was a bluff. Bots play on the server with a human-feeling delay; a bot also plays the
 seat of anyone who leaves, goes quiet (45 s) or sits on their turn (60 s), until they take it
 back. Everything is in memory: no volume, no files, 64 MB limit. The whole UI is one file,
-`static/index.html` (~960 lines of HTML/CSS/vanilla JS, inline SVG glyphs, no external assets).
+`static/index.html` (~1,000 lines of HTML/CSS/vanilla JS, inline SVG glyphs, no external assets).
 
 ## Files in this folder
 

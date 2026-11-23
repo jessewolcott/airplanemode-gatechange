@@ -37,6 +37,7 @@ How it works:
 | `test_hard_bot_is_better` | hard > easy over 300 heads-up rounds |
 | `test_bot_choices` | specific bot decisions |
 | `test_page_and_health` | `/health`; page has "Gate Change" and `api/rooms` relative and no `"/api/`; no absolute/root-relative `src`/`href`; icon is SVG |
+| `test_page_has_airplanemode_home_on_every_screen` | each of `#home`, `#lobby`, `#table` holds an `a.am-home` with `href="../"` and `aria-label="AirplaneMode home"`; the page calls `resume()` on `pageshow` (coming back rejoins the stored seat) |
 | `test_page_keeps_its_own_identity` | the commercial game's name never appears as a whole word (`\buno\b`, case-insensitive); the four `--sun/--tide/--star/--peak` hex colours don't fall one each into red/yellow/green/blue hue bands (`hue_family`) |
 | `test_header_and_tokens_required` | 403 without header/token, 404 unknown room, 400 non-object body |
 | `test_lobby_and_multiplayer_game` | code alphabet, open-games listing, join (lowercase code, duplicate name suffix, HTML kept as text), host-only lobby actions, options, private rooms unlisted, late join 409, per-seat hands, illegal move leaves `version` unchanged, two people + a bot play a whole single round, rematch host-only, back to lobby |
@@ -91,7 +92,7 @@ tests, then QEMU + buildx build for `linux/arm64,linux/amd64`. Pushes to
 3. Bump the pinned tag in the platform `compose.yaml` (never `latest`); platform CI checks
    tag, Caddy route and `portal/apps.json` entry. Update the platform CLAUDE.md status.
 
-Released so far: 0.1.0 (pinned on the platform).
+Released so far: 0.1.0, 0.1.1 (rejoin reclaims, unattended rounds advance, live games survive a full server), 0.1.2 (home button); 0.1.2 is pinned on the platform.
 
 ## Untested (from CLAUDE.md / README)
 
