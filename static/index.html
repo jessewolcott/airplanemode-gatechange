@@ -34,6 +34,14 @@
   /* ---------- shared bits ---------- */
   .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left)); }
   .bar .end { display: flex; align-items: center; gap: 4px; flex: none; }
+/* lobby and table: equal side columns put the middle in the true centre whatever sits on each
+   side. Each side is at least as wide as its content, so on a narrow phone where equal halves
+   don't fit (the table bar at 360 px) the wider side keeps its room and the middle moves over
+   a little instead of overflowing. */
+.bar.centred { display: grid; grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr); }
+.bar.centred > :first-child { justify-self: start; }
+.bar.centred > :nth-child(2) { white-space: nowrap; text-align: center; }
+.bar.centred > .end { justify-self: end; }
   /* AirplaneMode home (app contract item 10): right end of each bar, fixed on the home screen.
      z-index lifts it above the sheets (30/31) and the result overlay (25), so it stays reachable. */
   .am-home { position: relative; z-index: 35; flex: none; width: 44px; height: 44px; display: inline-grid; place-items: center; border-radius: 12px; color: var(--dim); background: var(--bg2); border: 1px solid var(--line); text-decoration: none; transition: color .15s, background .15s; }
@@ -354,7 +362,7 @@
 
 <!-- ============ lobby ============ -->
 <section id="lobby" class="screen" hidden>
-  <div class="bar">
+  <div class="bar centred">
     <button class="iconbtn" id="lobbyLeave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg>Leave</button>
     <b>Gate Change</b>
     <div class="end">
@@ -388,7 +396,7 @@
 
 <!-- ============ table ============ -->
 <section id="table" class="screen" hidden>
-  <div class="bar">
+  <div class="bar centred">
     <button class="iconbtn" id="menuBtn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <div class="mid"><span class="flap sm" id="tCode"></span><span id="roundInfo"></span></div>
     <div class="end">
